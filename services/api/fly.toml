@@ -1,0 +1,38 @@
+# Fly.io deployment (one app, two process groups from the same image).
+#   fly launch --no-deploy --copy-config   (first time; pick a name and region)
+#   fly secrets set DATABASE_URL=... SUPABASE_URL=... ANTHROPIC_API_KEY=... [SUPABASE_SERVICE_ROLE_KEY=...]
+#   fly deploy
+# Any container host works the same way: run `brian-api` behind HTTPS and one or more `brian-worker`.
+app = "brian-api"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENVIRONMENT = "production"
+  LOG_LEVEL = "INFO"
+
+[processes]
+  api = "brian-api"
+  worker = "brian-worker"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["api"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  processes = ["api", "worker"]

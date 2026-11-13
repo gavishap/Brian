@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -41,7 +42,7 @@ def run() -> None:
     uvicorn.run(
         "brian.main:app",
         host="0.0.0.0",  # noqa: S104 - container entrypoint
-        port=8000,
+        port=int(os.environ.get("PORT", "8000")),
         reload=settings.environment == "local",
         log_config=None,
     )

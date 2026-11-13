@@ -1,0 +1,32 @@
+# Runs the API and the worker in containers against the local Supabase stack.
+#   npx supabase start        # Postgres, Auth, Studio, local mail inbox (needs Docker)
+#   docker compose up --build
+# (Or run them directly: `cd services/api && uv run brian-api` / `uv run brian-worker`.)
+services:
+  api:
+    build: ./services/api
+    command: brian-api
+    env_file:
+      - path: ./services/api/.env
+        required: false
+    environment:
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
+      SUPABASE_URL: http://host.docker.internal:54321
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  worker:
+    build: ./services/api
+    command: brian-worker
+    env_file:
+      - path: ./services/api/.env
+        required: false
+    environment:
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
+      SUPABASE_URL: http://host.docker.internal:54321
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

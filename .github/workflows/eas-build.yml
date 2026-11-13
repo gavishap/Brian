@@ -1,0 +1,37 @@
+# Builds the iOS and Android apps on Expo Application Services (EAS).
+# Setup once: create an Expo access token (expo.dev -> Account settings -> Access tokens) and save it
+# as the EXPO_TOKEN repository secret; run `npx eas-cli init` locally to link the project.
+name: EAS build
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Build profile from apps/mobile/eas.json
+        type: choice
+        options: [preview, production, development]
+        default: preview
+      platform:
+        type: choice
+        options: [all, ios, android]
+        default: all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - run: eas build --profile ${{ inputs.profile }} --platform ${{ inputs.platform }} --non-interactive --no-wait

@@ -1,0 +1,3 @@
+-- Seed data for `supabase db reset` (local development only).
+-- Intentionally empty: create an account from the app (the sign-in code arrives in the local
+-- mail inbox at http://127.0.0.1:54324) and the sign-up trigger creates the profile.
