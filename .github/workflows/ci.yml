@@ -59,3 +59,5 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test -- --ci
+      - name: Bundle the iOS app with Metro (what Xcode embeds)
+        run: npx expo export --platform ios --output-dir "$RUNNER_TEMP/ios-bundle"

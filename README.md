@@ -100,6 +100,40 @@ sending them.
 `docker compose up --build` runs the API and worker in containers against the local Supabase
 stack instead of steps 2-3.
 
+### iOS Simulator (Xcode) with realistic data
+
+On a Mac with Xcode: `cd apps/mobile && npm run ios` builds the app with Xcode and launches it in
+the Simulator. Then fill your account with three weeks of simulated history and send yourself a
+nudge, which a local backend delivers straight into the Simulator (`xcrun simctl push`):
+
+```bash
+cd services/api && uv run brian-dev seed --email you@example.com --persona maya
+```
+
+```bash
+cd services/api && uv run brian-dev nudge-now --email you@example.com
+```
+
+Step by step: [apps/mobile/README.md](apps/mobile/README.md#run-it-in-the-ios-simulator-with-xcode).
+
+### Simulating the engine
+
+`brian-dev simulate` runs synthetic people with hidden preferences (timing, tone, framing, type,
+length) through the real planner, dispatcher, event ingestion and learning code on a simulated
+clock, and compares the learning policy with a random one. A 28-day run:
+
+| Person | Learning policy engaged | Random policy engaged | Learned best timing |
+|---|---|---|---|
+| Maya (night owl) | 77% | 54% | evening (truth: evening, night) |
+| Sam (early bird) | 71% | 36% | morning (truth: early morning, morning) |
+| Jordan (busy parent) | 62% | 31% | midday (truth: midday, afternoon) |
+
+```bash
+cd services/api && uv run brian-dev simulate --days 28
+```
+
+Details and how to read the report: [docs/nudge-engine.md](docs/nudge-engine.md#9-simulation).
+
 ## Tests and checks
 
 ```bash

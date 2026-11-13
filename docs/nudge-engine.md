@@ -153,3 +153,46 @@ logged data:
 
 Metrics worth a dashboard: engagement and completion rate per cohort, exploration rate,
 posterior entropy per dimension, ignore streaks, and opt-outs (notification permission revoked).
+
+## 9. Simulation
+
+`services/api/src/brian/sim/` drives synthetic people through the production code paths (planner,
+policy, dispatcher, event ingestion, check-in attribution, finalization) on a simulated clock.
+Each persona has hidden preferences: log-odds shifts per arm that set how likely they are to
+engage, plus how they engage (do it, reply, snooze, open) and how often they log progress on their
+own. Only pushes (recorded in memory) and copy (templates, or Claude with `--llm`) are swapped out.
+
+```bash
+cd services/api
+uv run brian-dev simulate --days 28            # all personas, learning vs random policy
+uv run brian-dev simulate --personas sam --days 56 --no-baseline
+```
+
+Synthetic accounts are deleted and the population statistics restored afterwards, so a run never
+shapes real users' priors. `brian-dev seed --email ...` uses the same machinery to give a real
+account weeks of history for demos and UI work.
+
+The report has two parts:
+
+* **Decision quality per week**: the mean *true* engagement probability of the arms the policy
+  picked. It is free of reaction noise, so it is the learning curve. "Engaged" also counts goals
+  logged in the attribution window without touching the notification, so it runs higher.
+* **Learned vs hidden truth** per dimension: the policy's top arms (posterior means) next to the
+  persona's true top two.
+
+A 28-day run (3 personas, about 45-50 policy nudges each):
+
+| Person | Policy | Engaged | Week 1 | Week 2 | Week 3 | Week 4 |
+|---|---|---|---|---|---|---|
+| Maya | learning | 77% | 58% | 59% | 60% | 64% |
+| Maya | random | 54% | 48% | 36% | 52% | 57% |
+| Sam | learning | 71% | 40% | 62% | 57% | 79% |
+| Sam | random | 36% | 38% | 42% | 29% | 36% |
+| Jordan | learning | 62% | 56% | 62% | 67% | 72% |
+| Jordan | random | 31% | 38% | 29% | 30% | 33% |
+
+The learning policy's top arm matched the persona's true top two in 13 of 15 dimension checks.
+The misses were Maya's tone and framing, where a month of about 45 nudges spread over five tones
+and six framings is not enough evidence. That is the motivation for the population prior and for
+sharing evidence across similar users once there is real traffic. `tests/test_simulation.py`
+asserts that the learning policy beats random and finds the right time window.

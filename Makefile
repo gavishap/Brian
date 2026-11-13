@@ -1,10 +1,14 @@
-.PHONY: help supabase api worker mobile test check openapi types
+.PHONY: help supabase api worker mobile ios seed nudge simulate test check openapi types
 
 help:
 	@echo "supabase  start the local Supabase stack (Postgres, Auth, Studio, mail inbox)"
 	@echo "api       run the API on :8000"
 	@echo "worker    run the background worker"
 	@echo "mobile    start the Expo dev server"
+	@echo "ios       build with Xcode and run in the iOS Simulator (macOS)"
+	@echo "seed      EMAIL=you@example.com [PERSONA=maya]: fill an account with simulated history"
+	@echo "nudge     EMAIL=you@example.com: send a nudge right now (e.g. to the Simulator)"
+	@echo "simulate  run synthetic personas through the engine and report what it learned"
 	@echo "test      run backend tests (set TEST_DATABASE_URL)"
 	@echo "check     lint, format check, type-check backend and mobile"
 	@echo "openapi   regenerate services/api/openapi.json"
@@ -21,6 +25,18 @@ worker:
 
 mobile:
 	cd apps/mobile && npx expo start
+
+ios:
+	cd apps/mobile && npm run ios
+
+seed:
+	cd services/api && uv run brian-dev seed --email $(EMAIL) --persona $(or $(PERSONA),maya)
+
+nudge:
+	cd services/api && uv run brian-dev nudge-now --email $(EMAIL)
+
+simulate:
+	cd services/api && uv run brian-dev simulate
 
 test:
 	cd services/api && uv run pytest

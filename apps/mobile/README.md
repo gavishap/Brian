@@ -29,11 +29,73 @@ npm start              # Expo dev server
 Sign-in sends a 6-digit code by email. With the local Supabase stack, read it in the Mailpit inbox
 that `npx supabase start` prints (usually `http://127.0.0.1:54324`).
 
+## Run it in the iOS Simulator with Xcode
+
+Needs a Mac with Xcode (App Store) and its iOS Simulator runtime, plus CocoaPods
+(`brew install cocoapods`). From the repository root, with Docker running:
+
+```bash
+npx supabase start                      # local Postgres + Auth; prints the anon key
+```
+
+```bash
+cd services/api && cp .env.example .env && uv sync
+uv run brian-api                        # terminal 1 (the .env sets PUSH_SIMULATOR_BUNDLE_ID)
+```
+
+```bash
+cd services/api && uv run brian-worker  # terminal 2: plans and sends nudges
+```
+
+```bash
+cd apps/mobile && cp .env.example .env  # paste EXPO_PUBLIC_SUPABASE_ANON_KEY from `supabase status`
+npm install
+npm run ios                             # = npx expo run:ios: builds with Xcode, boots a Simulator, installs, starts Metro
+```
+
+To work in Xcode itself: `npx expo prebuild --platform ios`, then `xed ios`, pick an iPhone
+Simulator and press Run (⌘R) with `npm start` running. The `ios/` folder is generated (and
+git-ignored); `expo prebuild` recreates it from `app.config.ts`.
+
+In the Simulator:
+
+1. **Sign in** with any email; the 6-digit code is in the local inbox at http://127.0.0.1:54324.
+   Go through onboarding and allow notifications.
+2. **Load realistic data**: three weeks of simulated history (goals, check-ins, nudges with their
+   outcomes, what the optimizer learned, an insights playbook) for that account:
+
+   ```bash
+   cd services/api && uv run brian-dev seed --email you@example.com --persona maya
+   ```
+
+   Personas: `maya` (night-owl writer), `sam` (early-bird analyst), `jordan` (busy parent).
+   Pull to refresh in the app.
+3. **Get a nudge now** (the policy picks goal and style; Claude writes it if `ANTHROPIC_API_KEY`
+   is set and you pass `--llm`):
+
+   ```bash
+   cd services/api && uv run brian-dev nudge-now --email you@example.com
+   ```
+
+   It appears as a banner in the Simulator. Long-press it (or click and hold) to see the action
+   buttons (**Done ✅ / Later / Reply** or **Reply / Less of these**). Your reaction is reported to
+   the API, credited to the goal, and fed to the optimizer: check the Today and Insights tabs.
+
+How Simulator push works: there are no real APNs pushes in development. In a development build on
+a simulator, the app registers a local token (`ExponentPushToken[simulator-…]`), and a backend
+running on the same Mac with `ENVIRONMENT=local` and `PUSH_SIMULATOR_BUNDLE_ID` delivers those
+nudges with `xcrun simctl push` in the same payload format Expo's push service uses. Release builds
+never register such a token. Everything else (planning, copy, buttons, events, learning) is the
+production path.
+
+No Mac at hand? `npx eas-cli@latest build --profile simulator --platform ios` builds a Simulator app
+in the cloud; install it on a Mac's Simulator with `eas build:run`.
+
 ## Expo Go vs. a development build
 
-Most screens work in **Expo Go**, but the core of the product does not: Expo Go can't receive remote
-pushes for your project, register notification action categories, or run the background
-notification task. Use a **development build on a physical device** for anything involving nudges:
+Most screens work in **Expo Go**, but nudges don't: Expo Go can't receive remote pushes for your
+project, register notification action categories, or run the background notification task. Use a
+development build (`npm run ios` above, or the cloud builds below) for anything involving nudges:
 
 ```bash
 npx eas-cli@latest build --profile development --platform ios
@@ -43,8 +105,15 @@ npx eas-cli@latest build --profile development --platform ios
 npx eas-cli@latest build --profile development --platform android
 ```
 
-Install the build on the phone, then `npm start` and open the project from the dev client.
-(iOS simulators can't receive remote pushes at all; Android emulators with Google Play can.)
+Install the build on the phone, then `npm start` and open the project from the dev client. Real
+pushes to a physical phone need `EAS_PROJECT_ID` and push credentials (see *Building for the
+stores*).
+
+## Browser preview
+
+`npx expo start --web` renders the app in a browser for quick UI work (set `CORS_ORIGINS` on the
+API, e.g. `["http://localhost:8081"]`). It uses JS bottom tabs (`src/app/(tabs)/_layout.web.tsx`)
+and no-op notification modules (`*.web.ts`); notifications are native-only.
 
 ## Scripts
 
@@ -53,6 +122,7 @@ Install the build on the phone, then `npm start` and open the project from the d
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | `expo lint` (ESLint with `eslint-config-expo`) |
 | `npm test` | Jest (`jest-expo` preset): SSE parser and notification-event mapping |
+| `npm run ios` | Build with Xcode and run in the iOS Simulator (`expo run:ios`) |
 | `npm run gen:api` | Regenerate `src/api/schema.ts` from `../../services/api/openapi.json` |
 
 After changing the API, regenerate its OpenAPI file in `services/api`, then run `npm run gen:api`
