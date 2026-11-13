@@ -275,11 +275,14 @@ async def simulate_person(
         async with sessionmaker() as session:
             sent = list(
                 await session.execute(
-                    select(Nudge.id, Nudge.arms).where(Nudge.user_id == user_id, Nudge.sent_at == clock)
+                    select(Nudge.id, Nudge.arms, Goal.title)
+                    .outerjoin(Goal, Goal.id == Nudge.goal_id)
+                    .where(Nudge.user_id == user_id, Nudge.sent_at == clock)
                 )
             )
-        for nudge_id, arms in sent:
-            reaction = persona.react(dict(arms or {}), rng)
+        replies = {spec.title: spec.replies for spec in persona.goals}
+        for nudge_id, arms, goal_title in sent:
+            reaction = persona.react(dict(arms or {}), rng, replies.get(goal_title or "", ()))
             for event in _events_for(nudge_id, clock, reaction):
                 counter += 1
                 heapq.heappush(queue, (event.occurred_at, counter, event))

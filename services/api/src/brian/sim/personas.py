@@ -16,6 +16,7 @@ class GoalSpec:
     category: str
     cadence: str = "daily"
     target_per_period: int = 1
+    replies: tuple[str, ...] = ()  # what the person writes back about this goal
 
 
 @dataclass(frozen=True)
@@ -55,14 +56,15 @@ class Persona:
         prefs = self.weights.get(dimension, {})
         return sorted(arms, key=lambda a: prefs.get(a, 0.0), reverse=True)
 
-    def react(self, arms: dict[str, str], rng: np.random.Generator) -> Reaction:
+    def react(self, arms: dict[str, str], rng: np.random.Generator, replies: tuple[str, ...] = ()) -> Reaction:
         if rng.random() < self.engagement_probability(arms):
             delay = float(min(150.0, rng.gamma(2.0, 9.0)))
             roll = rng.random()
             if roll < self.complete_share:
                 return Reaction("done", delay)
             if roll < self.complete_share + self.reply_share:
-                return Reaction("reply", delay, self.reply_lines[int(rng.integers(len(self.reply_lines)))])
+                lines = replies or self.reply_lines
+                return Reaction("reply", delay, lines[int(rng.integers(len(lines)))])
             if roll < self.complete_share + self.reply_share + self.snooze_share:
                 return Reaction("snooze", delay)
             return Reaction("opened", delay)
@@ -90,8 +92,24 @@ PERSONAS: dict[str, Persona] = {
                 "length": {"short": 0.4, "medium": -0.3},
             },
             goals=(
-                GoalSpec("Write 500 words", "Finish the first draft of my novel by spring", "creativity"),
-                GoalSpec("Run 3 times a week", "Have energy for long writing nights", "fitness", "weekly", 3),
+                GoalSpec(
+                    "Write 500 words",
+                    "Finish the first draft of my novel by spring",
+                    "creativity",
+                    replies=(
+                        "Did 300 words, the scene finally clicked",
+                        "Tired today, will do a short session",
+                        "On it after dinner",
+                    ),
+                ),
+                GoalSpec(
+                    "Run 3 times a week",
+                    "Have energy for long writing nights",
+                    "fitness",
+                    "weekly",
+                    3,
+                    replies=("Ran 5k by the beach!", "Legs are sore, walking instead today"),
+                ),
             ),
             facts=("Writes best late at night", "Works a day job until 6pm", "Prefers short, light-hearted messages"),
             reply_lines=(
@@ -121,9 +139,19 @@ PERSONAS: dict[str, Persona] = {
             },
             goals=(
                 GoalSpec(
-                    "Study Spanish for 20 minutes", "Hold a real conversation on the Madrid trip in June", "learning"
+                    "Study Spanish for 20 minutes",
+                    "Hold a real conversation on the Madrid trip in June",
+                    "learning",
+                    replies=("Done on the train", "20 min of flashcards + a podcast"),
                 ),
-                GoalSpec("Save $500 this month", "Build a six-month emergency fund", "finance", "weekly", 1),
+                GoalSpec(
+                    "Save $500 this month",
+                    "Build a six-month emergency fund",
+                    "finance",
+                    "weekly",
+                    1,
+                    replies=("Moved $125 to savings", "Skipped takeout this week"),
+                ),
             ),
             facts=("Commutes by train 7-8am", "Likes seeing numbers and trends", "Hates fluffy motivational talk"),
             reply_lines=("Done on the train", "Skipped yesterday, back on it", "20 min of Duolingo + podcast"),
@@ -145,8 +173,20 @@ PERSONAS: dict[str, Persona] = {
                 "length": {"short": 0.5, "medium": -0.4},
             },
             goals=(
-                GoalSpec("Meditate for 10 minutes", "Be calmer with the kids in the evening", "mindfulness"),
-                GoalSpec("Call a friend", "Not lose touch with the people I love", "relationships", "weekly", 1),
+                GoalSpec(
+                    "Meditate for 10 minutes",
+                    "Be calmer with the kids in the evening",
+                    "mindfulness",
+                    replies=("Managed 5 minutes in the car", "Kids were up all night, not today"),
+                ),
+                GoalSpec(
+                    "Call a friend",
+                    "Not lose touch with the people I love",
+                    "relationships",
+                    "weekly",
+                    1,
+                    replies=("Called Priya!", "Texted Sam, call on Sunday"),
+                ),
             ),
             facts=(
                 "Has two kids under 6",

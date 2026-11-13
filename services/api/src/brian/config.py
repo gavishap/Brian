@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     expo_receipts_url: str = "https://exp.host/--/api/v2/push/getReceipts"
     expo_access_token: SecretStr | None = None
     push_dry_run: bool = False
+    # Local development on a Mac: deliver pushes for Simulator devices with `xcrun simctl push` to
+    # this bundle id (the app's ios.bundleIdentifier). Ignored unless ENVIRONMENT=local.
+    push_simulator_bundle_id: str | None = None
 
     # --- Nudge engine -----------------------------------------------------------------------
     policy_version: str = "ts-factorized-v1"
@@ -64,6 +67,11 @@ class Settings(BaseSettings):
     nudge_attribution_hours: float = 3.0
     nudge_min_gap_minutes: int = 150
     planning_horizon_hours: int = 30
+
+    # --- Browser preview of the app (Expo web) -------------------------------------------------
+    # Origins allowed to call the API from a browser, e.g. ["http://localhost:8081"]. Native apps
+    # don't need this.
+    cors_origins: list[str] = []
 
     # --- Internal endpoints (cron-style tick for serverless deployments) ----------------------
     internal_api_key: SecretStr | None = None

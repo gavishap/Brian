@@ -10,6 +10,7 @@ import { api, unwrap } from '@/api/client';
 import { configureNotifications } from './setup';
 
 const TOKEN_KEY = 'brian.expo-push-token';
+const SIMULATOR_ID_KEY = 'brian.simulator-push-id';
 
 export type PushRegistration =
   | { status: 'registered'; token: string }
@@ -34,9 +35,10 @@ export async function notificationPermission(): Promise<Notifications.Permission
  * token fresh); onboarding calls it with `prompt: true` after explaining why.
  */
 export async function registerPushToken({ prompt }: { prompt: boolean }): Promise<PushRegistration> {
-  if (!Device.isDevice) return { status: 'unsupported' }; // simulators cannot receive remote pushes
+  if (Platform.OS === 'web') return { status: 'unsupported' };
   await configureNotifications();
 
+  // Ask even on a simulator: without permission iOS won't show the nudges pushed into it.
   let permission = await Notifications.getPermissionsAsync();
   if (permission.status !== 'granted' && prompt && permission.canAskAgain) {
     permission = await Notifications.requestPermissionsAsync();
@@ -45,12 +47,8 @@ export async function registerPushToken({ prompt }: { prompt: boolean }): Promis
     return { status: permission.status === 'denied' ? 'denied' : 'undetermined' };
   }
 
-  const id = projectId();
-  if (!id) {
-    console.warn('EAS_PROJECT_ID is not set; push notifications are disabled.');
-    return { status: 'misconfigured' };
-  }
-  const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: id });
+  const token = await pushToken();
+  if (!token) return { status: Device.isDevice ? 'misconfigured' : 'unsupported' };
   unwrap(
     await api.POST('/v1/devices', {
       body: {
@@ -64,6 +62,33 @@ export async function registerPushToken({ prompt }: { prompt: boolean }): Promis
   );
   await AsyncStorage.setItem(TOKEN_KEY, token);
   return { status: 'registered', token };
+}
+
+/**
+ * The token pushes are addressed to. On a physical device: the Expo push token. In the iOS
+ * Simulator (development builds only): a local stand-in that a backend running on the same Mac
+ * delivers with `xcrun simctl push` (see PUSH_SIMULATOR_BUNDLE_ID in services/api/.env.example).
+ */
+async function pushToken(): Promise<string | null> {
+  if (!Device.isDevice) {
+    return __DEV__ && Platform.OS === 'ios' ? simulatorToken() : null;
+  }
+  const id = projectId();
+  if (!id) {
+    console.warn('EAS_PROJECT_ID is not set; push notifications are disabled.');
+    return null;
+  }
+  const { data } = await Notifications.getExpoPushTokenAsync({ projectId: id });
+  return data;
+}
+
+async function simulatorToken(): Promise<string> {
+  let id = await AsyncStorage.getItem(SIMULATOR_ID_KEY);
+  if (!id) {
+    id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    await AsyncStorage.setItem(SIMULATOR_ID_KEY, id);
+  }
+  return `ExponentPushToken[simulator-${id}]`;
 }
 
 /** Stop pushes to this device for the signed-in account (call before signing out). */

@@ -8,7 +8,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Brian',
   slug: 'brian',
   version: '0.1.0',
-  platforms: ['ios', 'android'],
+  // Web is a development preview for UI work (`npx expo start --web`); notifications are native-only.
+  platforms: ['ios', 'android', 'web'],
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'brian',
@@ -30,6 +31,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: './assets/images/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+  },
+  web: {
+    output: 'single',
+    favicon: './assets/images/icon.png',
   },
   plugins: [
     'expo-router',

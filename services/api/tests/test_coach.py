@@ -273,4 +273,8 @@ async def test_copywriter_falls_back_to_templates_on_api_errors(claude: MockClau
         arms={"nudge_type": "reminder", "tone": "direct", "framing": "gain", "length": "short"},
     )
     result = await generate_copy(request)
-    assert (result.body, result.source) == ("Time for Read 20 pages.", "template")
+    assert (result.title, result.body, result.source) == (
+        "Read 20 pages",
+        "Today's step is still open. Now is a good time.",
+        "template",
+    )

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from brian.config import get_settings
 from brian.db import get_engine
@@ -30,6 +31,14 @@ def create_app() -> FastAPI:
     )
     for module in (system, me, devices, goals, nudges, chat, insights):
         app.include_router(module.router)
+    origins = get_settings().cors_origins
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["*"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
     return app
 
 

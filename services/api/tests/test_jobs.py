@@ -39,7 +39,7 @@ async def test_plan_and_send_jobs(client: AsyncClient, user: User) -> None:
         nudge = await session.scalar(select(Nudge))
     assert nudge is not None
     assert nudge.copy_source == "template"  # Claude disabled in tests
-    assert nudge.body and "Practice guitar" in nudge.body
+    assert nudge.title == "Practice guitar" and nudge.body
     assert nudge.push_tickets[0]["ticket_id"].startswith("dry-run-")
 
 
