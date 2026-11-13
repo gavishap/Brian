@@ -1,0 +1,47 @@
+"""FastAPI application. Run with `brian-api` (or `uv run brian-api`)."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import FastAPI
+
+from brian.config import get_settings
+from brian.db import get_engine
+from brian.logs import configure_logging
+from brian.routers import chat, devices, goals, insights, me, nudges, system
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    await get_engine().dispose()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Brian API",
+        version="0.1.0",
+        summary="Goal coaching agent with proactive, self-optimizing nudges.",
+        lifespan=lifespan,
+    )
+    for module in (system, me, devices, goals, nudges, chat, insights):
+        app.include_router(module.router)
+    return app
+
+
+app = create_app()
+
+
+def run() -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    uvicorn.run(
+        "brian.main:app",
+        host="0.0.0.0",  # noqa: S104 - container entrypoint
+        port=8000,
+        reload=settings.environment == "local",
+        log_config=None,
+    )
