@@ -39,16 +39,20 @@ export function eventFromResponse(response: ResponseLike, now: Date = new Date()
   return { ...base, type: 'action', action_id: actionIdentifier, ...(text ? { text } : {}) };
 }
 
-/** A nudge arrived while the app was running (delivery confirmation). */
-export function eventFromReceived(notification: NotificationLike, now: Date = new Date()): NudgeEvent | null {
-  const nudgeId = nudgeIdOf(notification.request.content.data);
-  if (!nudgeId) return null;
+/** Delivery confirmation. Keyed by nudge, so every device and code path reports it at most once. */
+export function receivedEvent(nudgeId: string, now: Date = new Date()): NudgeEvent {
   return {
     nudge_id: nudgeId,
     type: 'received',
     occurred_at: now.toISOString(),
-    client_event_id: stableEventId('recv', notification.request.identifier),
+    client_event_id: stableEventId('recv', nudgeId),
   };
+}
+
+/** A nudge arrived while the app was running. */
+export function eventFromReceived(notification: NotificationLike, now: Date = new Date()): NudgeEvent | null {
+  const nudgeId = nudgeIdOf(notification.request.content.data);
+  return nudgeId ? receivedEvent(nudgeId, now) : null;
 }
 
 /**

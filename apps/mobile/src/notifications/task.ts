@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 
-import { dataFromTaskPayload, eventFromResponse, nudgeIdOf } from './events';
+import { dataFromTaskPayload, eventFromResponse, nudgeIdOf, receivedEvent } from './events';
 import { enqueueEvents, flushEvents } from './queue';
 
 /**
@@ -25,14 +25,7 @@ TaskManager.defineTask<Notifications.NotificationTaskPayload>(NOTIFICATION_TASK,
       const payload = dataFromTaskPayload(data);
       const nudgeId = nudgeIdOf(payload);
       if (nudgeId) {
-        await enqueueEvents([
-          {
-            nudge_id: nudgeId,
-            type: 'received',
-            occurred_at: new Date().toISOString(),
-            client_event_id: `recv:${nudgeId}`,
-          },
-        ]);
+        await enqueueEvents([receivedEvent(nudgeId)]);
       }
     }
     await flushEvents();
