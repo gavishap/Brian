@@ -198,7 +198,7 @@ class ChatMessage(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid)
     seq: Mapped[int] = mapped_column(Integer)
     role: Mapped[str] = mapped_column(Text)
-    content: Mapped[list[Any]] = mapped_column(JSONB)
+    content: Mapped[Any] = mapped_column(JSONB)  # exact content sent to / received from Claude
     display_text: Mapped[str | None] = mapped_column(Text)
     stop_reason: Mapped[str | None] = mapped_column(Text)
     usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

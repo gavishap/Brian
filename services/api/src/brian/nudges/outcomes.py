@@ -93,15 +93,18 @@ async def _apply_event(session: AsyncSession, profile: Profile, nudge: Nudge, ev
             )
         )
     elif outcome == "snoozed":
-        await _schedule_snooze(session, profile, nudge, now)
+        await _schedule_snooze(session, profile, nudge, tapped_at=event.occurred_at, now=now)
 
     if outcome in rewards.TERMINAL_OUTCOMES and event.occurred_at <= nudge.expires_at:
         await finalize_nudge(session, nudge.id, now=now)
 
 
-async def _schedule_snooze(session: AsyncSession, profile: Profile, nudge: Nudge, now: datetime) -> None:
-    """'Later' re-sends the same message after a while (outside quiet hours)."""
-    send_at = now + timedelta(minutes=SNOOZE_MINUTES)
+async def _schedule_snooze(
+    session: AsyncSession, profile: Profile, nudge: Nudge, *, tapped_at: datetime, now: datetime
+) -> None:
+    """'Later' re-sends the same message an hour after the tap (outside quiet hours). A tap that
+    reaches us late from the offline queue is honoured as soon as possible."""
+    send_at = max(tapped_at + timedelta(minutes=SNOOZE_MINUTES), now + timedelta(minutes=1))
     for _ in range(48):  # walk forward in 15-minute steps until outside quiet hours
         local = to_local(send_at, profile.timezone).time()
         if not is_quiet(local, profile.quiet_hours_start, profile.quiet_hours_end):

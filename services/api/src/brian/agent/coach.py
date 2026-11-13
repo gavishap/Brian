@@ -151,9 +151,9 @@ async def _append(
     stop_reason: str | None = None,
     usage: dict[str, Any] | None = None,
 ) -> int:
+    # Stored exactly as sent: replaying a different (even equivalent) shape later would change the
+    # request prefix, invalidating earlier thinking blocks and the prompt cache.
     content = message["content"]
-    if isinstance(content, str):
-        content = [{"type": "text", "text": content}]
     row = ChatMessage(
         conversation_id=conversation.id,
         user_id=conversation.user_id,
@@ -229,10 +229,8 @@ async def stream_chat(user_id: uuid.UUID, request: ChatRequest) -> AsyncIterator
 
         history, seq = await _load_history(session, conversation)
         user_message: Message = {"role": "user", "content": [{"type": "text", "text": request.message}]}
-        context_message: Message = {
-            "role": "system",
-            "content": await build_context_message(session, profile, request.nudge_id, now),
-        }
+        context_text = await build_context_message(session, profile, request.nudge_id, now)
+        context_message: Message = {"role": "system", "content": [{"type": "text", "text": context_text}]}
         await _append(session, conversation, seq, user_message, display_text=request.message)
         await _append(session, conversation, seq + 1, context_message)
         seq += 2

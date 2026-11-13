@@ -214,6 +214,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "asyncpg" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -237,6 +238,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "asyncpg", specifier = ">=0.32.0" },
     { name = "mypy", specifier = ">=2.4.0" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.5.0" },
