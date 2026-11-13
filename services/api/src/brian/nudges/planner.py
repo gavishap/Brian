@@ -76,6 +76,63 @@ def choose_goal(
     return goals[int(rng.choice(len(goals), p=weights))]
 
 
+def decision_context(
+    profile: Profile, goal: Goal, p: GoalProgress, *, day: date, now: datetime, ignored: int
+) -> DecisionContext:
+    return DecisionContext(
+        day_type=day_type(day),
+        local_hour=to_local(now, profile.timezone).hour,
+        goal_category=goal.category,
+        goal_cadence=goal.cadence,
+        current_streak=p.current_streak,
+        period_complete=p.period_complete,
+        period_count=p.period_count,
+        period_target=p.period_target,
+        total_check_ins=p.total_check_ins,
+        hours_since_check_in=(
+            round((now - p.last_check_in_at).total_seconds() / 3600.0, 1) if p.last_check_in_at else None
+        ),
+        consecutive_ignored=ignored,
+        days_since_signup=max(0, (now - profile.created_at).days),
+    )
+
+
+async def choose_arms(
+    session: AsyncSession,
+    profile: Profile,
+    ctx: DecisionContext,
+    *,
+    windows: list[str] | None,
+    now: datetime,
+    rng: np.random.Generator,
+    settings: Settings,
+) -> tuple[dict[str, ArmChoice], dict[str, str]]:
+    """Thompson-sample one arm per dimension. `windows=None` skips timing (the caller decides when)."""
+    dimensions = [d for d in DIMENSIONS if windows is not None or d != "time_window"]
+    keys = {d: context_key(d, ctx) for d in dimensions}
+    user_stats, population_stats = await load_stats(
+        session,
+        profile.id,
+        keys.items(),
+        now=now,
+        user_half_life_days=settings.policy_user_half_life_days,
+        global_half_life_days=settings.policy_global_half_life_days,
+    )
+    choices: dict[str, ArmChoice] = {}
+    for dimension in dimensions:
+        arms = list(windows or []) if dimension == "time_window" else eligible_arms(dimension, ctx)
+        posteriors = {
+            arm: posterior(
+                user_stats.get((dimension, keys[dimension], arm)),
+                population_stats.get((dimension, keys[dimension], arm)),
+                settings.policy_prior_strength,
+            )
+            for arm in arms
+        }
+        choices[dimension] = thompson_choose(dimension, posteriors, rng, epsilon=settings.policy_epsilon)
+    return choices, keys
+
+
 async def plan_next_nudge(
     session: AsyncSession,
     profile: Profile,
@@ -95,7 +152,11 @@ async def plan_next_nudge(
     )
     if not devices:
         return PlanResult(None, "no_devices")
-    goals = list(await session.scalars(select(Goal).where(Goal.user_id == profile.id, Goal.status == "active")))
+    goals = list(
+        await session.scalars(
+            select(Goal).where(Goal.user_id == profile.id, Goal.status == "active").order_by(Goal.created_at, Goal.id)
+        )
+    )
     if not goals:
         return PlanResult(None, "no_active_goals")
     pending = await session.scalar(
@@ -161,48 +222,8 @@ async def plan_next_nudge(
         if r.goal_id is not None:
             last_nudged[r.goal_id] = max(last_nudged.get(r.goal_id, r.scheduled_for), r.scheduled_for)
     goal = choose_goal(goals, progress, last_nudged, now, rng)
-    p = progress[goal.id]
-
-    local_now = to_local(now, profile.timezone)
-    ctx = DecisionContext(
-        day_type=day_type(plan_day),
-        local_hour=local_now.hour,
-        goal_category=goal.category,
-        goal_cadence=goal.cadence,
-        current_streak=p.current_streak,
-        period_complete=p.period_complete,
-        period_count=p.period_count,
-        period_target=p.period_target,
-        total_check_ins=p.total_check_ins,
-        hours_since_check_in=(
-            round((now - p.last_check_in_at).total_seconds() / 3600.0, 1) if p.last_check_in_at else None
-        ),
-        consecutive_ignored=ignored,
-        days_since_signup=max(0, (now - profile.created_at).days),
-    )
-
-    keys = {d: context_key(d, ctx) for d in DIMENSIONS}
-    user_stats, population_stats = await load_stats(
-        session,
-        profile.id,
-        keys.items(),
-        now=now,
-        user_half_life_days=settings.policy_user_half_life_days,
-        global_half_life_days=settings.policy_global_half_life_days,
-    )
-
-    choices: dict[str, ArmChoice] = {}
-    for dimension in DIMENSIONS:
-        arms = list(windows) if dimension == "time_window" else eligible_arms(dimension, ctx)
-        posteriors = {
-            arm: posterior(
-                user_stats.get((dimension, keys[dimension], arm)),
-                population_stats.get((dimension, keys[dimension], arm)),
-                settings.policy_prior_strength,
-            )
-            for arm in arms
-        }
-        choices[dimension] = thompson_choose(dimension, posteriors, rng, epsilon=settings.policy_epsilon)
+    ctx = decision_context(profile, goal, progress[goal.id], day=plan_day, now=now, ignored=ignored)
+    choices, keys = await choose_arms(session, profile, ctx, windows=list(windows), now=now, rng=rng, settings=settings)
 
     slots = windows[choices["time_window"].arm]
     send_at = slots[int(rng.integers(len(slots)))]

@@ -30,6 +30,7 @@ dev = [
 [project.scripts]
 brian-api = "brian.main:run"
 brian-worker = "brian.worker:run"
+brian-dev = "brian.devtools:run"
 
 [build-system]
 requires = ["hatchling"]

@@ -26,7 +26,9 @@ RECEIPT_DELAY = timedelta(minutes=15)  # Expo recommends waiting before fetching
 FINALIZE_GRACE = timedelta(minutes=30)  # lets offline devices flush late events first
 
 
-async def claim_due(session: AsyncSession, now: datetime, limit: int) -> list[uuid.UUID]:
+async def claim_due(
+    session: AsyncSession, now: datetime, limit: int, user_id: uuid.UUID | None = None
+) -> list[uuid.UUID]:
     rows = await session.execute(
         text(
             """
@@ -34,6 +36,7 @@ async def claim_due(session: AsyncSession, now: datetime, limit: int) -> list[uu
             where id in (
               select id from nudges
               where status = 'planned' and scheduled_for <= :now
+                and (cast(:user_id as uuid) is null or user_id = cast(:user_id as uuid))
               order by scheduled_for
               limit :limit
               for update skip locked
@@ -41,7 +44,7 @@ async def claim_due(session: AsyncSession, now: datetime, limit: int) -> list[uu
             returning id
             """
         ),
-        {"now": now, "limit": limit},
+        {"now": now, "limit": limit, "user_id": user_id},
     )
     return [r[0] for r in rows]
 
@@ -156,10 +159,12 @@ async def dispatch_due_nudges(
     now: datetime | None = None,
     limit: int = 50,
     copy_fn: CopyFn = generate_copy,
+    user_id: uuid.UUID | None = None,
 ) -> dict[str, int]:
+    """Send every due nudge (or only `user_id`'s, which simulations use)."""
     now = now or utcnow()
     async with sessionmaker() as session:
-        ids = await claim_due(session, now, limit)
+        ids = await claim_due(session, now, limit, user_id)
         await session.commit()
     results: dict[str, int] = {}
     for nudge_id in ids:
@@ -238,7 +243,11 @@ async def check_receipts(
 
 
 async def finalize_expired(
-    sessionmaker: async_sessionmaker[AsyncSession], *, now: datetime | None = None, limit: int = 500
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    now: datetime | None = None,
+    limit: int = 500,
+    user_id: uuid.UUID | None = None,
 ) -> int:
     """Close attribution windows that have ended: no reaction counts as `ignored`."""
     now = now or utcnow()
@@ -250,6 +259,7 @@ async def finalize_expired(
                     Nudge.finalized_at.is_(None),
                     Nudge.status.in_(("sent", "delivered")),
                     Nudge.expires_at < now - FINALIZE_GRACE,
+                    *([Nudge.user_id == user_id] if user_id else []),
                 )
                 .limit(limit)
             )

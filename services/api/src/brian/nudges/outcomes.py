@@ -23,8 +23,12 @@ OPEN_STATUSES = ("sent", "delivered")
 SNOOZE_MINUTES = 60
 
 
-async def ingest_events(session: AsyncSession, profile: Profile, events: list[NudgeEventIn]) -> NudgeEventsResult:
-    """Store device-reported events (idempotently) and apply their side effects."""
+async def ingest_events(
+    session: AsyncSession, profile: Profile, events: list[NudgeEventIn], *, now: datetime | None = None
+) -> NudgeEventsResult:
+    """Store device-reported events (idempotently) and apply their side effects. `now` defaults to the
+    wall clock (simulations pass their own)."""
+    now = now or utcnow()
     accepted = duplicates = unknown = 0
     nudge_ids = {e.nudge_id for e in events}
     nudges = {
@@ -54,13 +58,14 @@ async def ingest_events(session: AsyncSession, profile: Profile, events: list[Nu
             duplicates += 1
             continue
         accepted += 1
-        await _apply_event(session, profile, nudge, event)
+        await _apply_event(session, profile, nudge, event, now)
     await session.flush()
     return NudgeEventsResult(accepted=accepted, duplicates=duplicates, unknown_nudges=unknown)
 
 
-async def _apply_event(session: AsyncSession, profile: Profile, nudge: Nudge, event: NudgeEventIn) -> None:
-    now = utcnow()
+async def _apply_event(
+    session: AsyncSession, profile: Profile, nudge: Nudge, event: NudgeEventIn, now: datetime
+) -> None:
     if event.type == "received":
         if nudge.delivered_at is None:
             nudge.delivered_at = event.occurred_at
@@ -78,7 +83,7 @@ async def _apply_event(session: AsyncSession, profile: Profile, nudge: Nudge, ev
         from brian.goals import add_check_in  # local import: goals imports this module
 
         await add_check_in(
-            session, goal, kind="done", nudge_id=nudge.id, source="notification", occurred_at=event.occurred_at
+            session, goal, kind="done", nudge_id=nudge.id, source="notification", occurred_at=event.occurred_at, now=now
         )
     elif outcome == "replied" and event.text and goal is not None:
         session.add(
@@ -130,7 +135,7 @@ async def _schedule_snooze(
     )
 
 
-async def attribute_check_in(session: AsyncSession, check_in: CheckIn) -> None:
+async def attribute_check_in(session: AsyncSession, check_in: CheckIn, now: datetime | None = None) -> None:
     """A check-in inside an open nudge's attribution window means the nudge worked: close it."""
     candidates = await session.scalars(
         select(Nudge.id).where(
@@ -146,7 +151,7 @@ async def attribute_check_in(session: AsyncSession, check_in: CheckIn) -> None:
         )
     )
     for nudge_id in list(candidates):
-        await finalize_nudge(session, nudge_id, now=utcnow())
+        await finalize_nudge(session, nudge_id, now=now or utcnow())
 
 
 async def finalize_nudge(session: AsyncSession, nudge_id: uuid.UUID, *, now: datetime) -> str | None:

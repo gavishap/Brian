@@ -119,6 +119,7 @@ async def add_check_in(
     nudge_id: uuid.UUID | None = None,
     source: str = "app",
     occurred_at: datetime | None = None,
+    now: datetime | None = None,
 ) -> CheckIn:
     """Record a check-in and credit any open nudge that prompted it (closing its outcome)."""
     from brian.nudges.outcomes import attribute_check_in  # local import: outcomes imports this module
@@ -137,7 +138,7 @@ async def add_check_in(
     await session.flush()
     await session.refresh(check_in)
     if kind in ("done", "progress"):
-        await attribute_check_in(session, check_in)
+        await attribute_check_in(session, check_in, now)
     return check_in
 
 
