@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-import anthropic
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -155,8 +154,8 @@ async def generate_copy(req: CopyRequest, settings: Settings | None = None) -> C
         )
     except LLMUnavailableError:
         return CopyResult(fallback_title, fallback_body, "template")
-    except anthropic.AnthropicError as exc:
-        log.warning("copywriter failed, using template: %s", exc)
+    except Exception as exc:  # any failure (API error, outage, bad config) must not lose the nudge
+        log.warning("copywriter failed, using template: %r", exc)
         return CopyResult(fallback_title, fallback_body, "template")
 
     parsed = response.parsed_output

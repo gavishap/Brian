@@ -1,3 +1,6 @@
+# Local dev processes (scripts/dev-up.sh)
+.dev/
+
 # Python
 __pycache__/
 *.py[cod]

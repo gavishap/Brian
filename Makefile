@@ -1,6 +1,10 @@
-.PHONY: help supabase api worker mobile ios seed nudge simulate test check openapi types
+.PHONY: help up down down-all logs demo supabase api worker mobile ios seed nudge simulate test check openapi types
 
 help:
+	@echo "up        start Supabase (Docker), write .env files, run the API + worker in the background"
+	@echo "down      stop the API + worker (down-all: also stop Supabase)"
+	@echo "logs      follow the API and worker logs"
+	@echo "demo      EMAIL=you@example.com [PERSONA=maya]: simulated history + a nudge right now"
 	@echo "supabase  start the local Supabase stack (Postgres, Auth, Studio, mail inbox)"
 	@echo "api       run the API on :8000"
 	@echo "worker    run the background worker"
@@ -13,6 +17,21 @@ help:
 	@echo "check     lint, format check, type-check backend and mobile"
 	@echo "openapi   regenerate services/api/openapi.json"
 	@echo "types     regenerate the mobile app's API types from openapi.json"
+
+up:
+	./scripts/dev-up.sh
+
+down:
+	./scripts/dev-down.sh
+
+down-all:
+	./scripts/dev-down.sh --supabase
+
+logs:
+	tail -f .dev/api.log .dev/worker.log
+
+demo:
+	./scripts/demo.sh $(EMAIL) $(or $(PERSONA),maya)
 
 supabase:
 	npx supabase start

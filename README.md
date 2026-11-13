@@ -62,59 +62,39 @@ docs/                   architecture and nudge-engine design
 
 ## Local development
 
-Prerequisites: Node 22+, [uv](https://docs.astral.sh/uv/), Docker (for the local Supabase stack),
-and for device testing Xcode and/or Android Studio, or a phone with a development build.
+Prerequisites: Docker Desktop (running), Node 22+, [uv](https://docs.astral.sh/uv/), and for the
+iOS app Xcode with an iOS Simulator runtime plus CocoaPods (`brew install cocoapods`).
 
 ```bash
-# 1. Supabase: Postgres + Auth + Studio + a local inbox for sign-in codes (http://127.0.0.1:54324)
-npx supabase start
+make up                              # Supabase in Docker, .env files, API + worker in the background
 ```
 
 ```bash
-# 2. Backend
-cd services/api
-cp .env.example .env        # add ANTHROPIC_API_KEY to enable the coach and AI copy
-uv sync
-uv run brian-api            # http://127.0.0.1:8000/docs
+make ios                             # builds with Xcode and opens the app in the iOS Simulator
+```
+
+Sign in with any email (the 6-digit code is in the local inbox at http://127.0.0.1:54324), finish
+onboarding and allow notifications. Then give your account three weeks of simulated history and
+send yourself a nudge, which the local API pushes straight into the Simulator:
+
+```bash
+make demo EMAIL=you@example.com      # PERSONA=maya | sam | jordan
 ```
 
 ```bash
-# 3. Worker (in another terminal): plans, sends and learns from nudges
-cd services/api && uv run brian-worker
+make nudge EMAIL=you@example.com     # another nudge, any time
 ```
 
-```bash
-# 4. Mobile app
-cd apps/mobile
-cp .env.example .env        # API URL and Supabase URL/anon key (`npx supabase status` prints them)
-npm install
-npx expo start
-```
+`make logs` follows the API and worker logs, `make down` stops them (`make down-all` also stops
+Supabase; the data stays in Docker volumes). Add `ANTHROPIC_API_KEY` to `services/api/.env` for the
+Coach chat and Claude-written nudges; without it nudges use templates. API docs:
+http://127.0.0.1:8000/docs.
 
-On a physical phone, point `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_SUPABASE_URL` at your
-computer's LAN IP instead of 127.0.0.1. Push notifications with action buttons need a development
-build on a real device (`npx expo run:ios` / `npx expo run:android`, or `eas build --profile
-development`); everything else works in a simulator. `PUSH_DRY_RUN=true` logs pushes instead of
-sending them.
-
-`docker compose up --build` runs the API and worker in containers against the local Supabase
-stack instead of steps 2-3.
-
-### iOS Simulator (Xcode) with realistic data
-
-On a Mac with Xcode: `cd apps/mobile && npm run ios` builds the app with Xcode and launches it in
-the Simulator. Then fill your account with three weeks of simulated history and send yourself a
-nudge, which a local backend delivers straight into the Simulator (`xcrun simctl push`):
-
-```bash
-cd services/api && uv run brian-dev seed --email you@example.com --persona maya
-```
-
-```bash
-cd services/api && uv run brian-dev nudge-now --email you@example.com
-```
-
-Step by step: [apps/mobile/README.md](apps/mobile/README.md#run-it-in-the-ios-simulator-with-xcode).
+What `make up` runs (scripts/dev-up.sh), if you prefer separate terminals: `npx supabase start`,
+then `uv run brian-api` and `uv run brian-worker` in `services/api`, and `npm install` in
+`apps/mobile`; it writes both `.env` files from `npx supabase status`. A physical phone needs your
+Mac's LAN IP in `apps/mobile/.env` instead of 127.0.0.1. More in
+[apps/mobile/README.md](apps/mobile/README.md#run-it-in-the-ios-simulator-with-xcode).
 
 ### Simulating the engine
 

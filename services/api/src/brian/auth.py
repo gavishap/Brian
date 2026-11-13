@@ -30,29 +30,42 @@ class CurrentUser:
     email: str | None
 
 
+ASYMMETRIC_ALGORITHMS = ["ES256", "RS256", "EdDSA"]
+
+
 class TokenVerifier:
+    """Verifies a Supabase access token by the algorithm it was signed with.
+
+    HS256 tokens (local `supabase start`, and projects still on the legacy shared secret) are checked
+    with SUPABASE_JWT_SECRET; asymmetric ones (projects on signing keys) against the project's
+    published JWKS. A project rotating from one to the other issues both, so both are accepted. Each
+    path only ever uses its own kind of key, which rules out algorithm-confusion attacks.
+    """
+
     def __init__(self, settings: Settings) -> None:
         self._audience = settings.supabase_jwt_audience
         self._secret = settings.supabase_jwt_secret.get_secret_value() if settings.supabase_jwt_secret else None
-        self._jwks: jwt.PyJWKClient | None = None
-        if self._secret is None:
-            self._jwks = jwt.PyJWKClient(
-                f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json",
-                cache_jwk_set=True,
-                lifespan=600,
-            )
+        self._jwks = jwt.PyJWKClient(
+            f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json",
+            cache_jwk_set=True,
+            lifespan=600,
+        )
 
     def verify(self, token: str) -> dict[str, Any]:
         """Return the token's claims, or raise `jwt.PyJWTError`. Blocking when JWKS must be fetched."""
         options: Options = {"require": ["exp", "sub"]}
-        if self._secret is not None:
+        algorithm = jwt.get_unverified_header(token).get("alg")
+        if algorithm == "HS256":
+            if self._secret is None:
+                raise jwt.InvalidTokenError("HS256 token, but SUPABASE_JWT_SECRET is not configured")
             return jwt.decode(token, self._secret, algorithms=["HS256"], audience=self._audience, options=options)
-        assert self._jwks is not None
+        if algorithm not in ASYMMETRIC_ALGORITHMS:
+            raise jwt.InvalidAlgorithmError(f"unsupported token algorithm {algorithm!r}")
         signing_key = self._jwks.get_signing_key_from_jwt(token)
         return jwt.decode(
             token,
             signing_key.key,
-            algorithms=["ES256", "RS256", "EdDSA"],
+            algorithms=ASYMMETRIC_ALGORITHMS,
             audience=self._audience,
             options=options,
         )

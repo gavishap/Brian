@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Any
 
@@ -15,20 +16,41 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
 class LLMUnavailableError(RuntimeError):
-    """Raised when Claude is disabled by configuration."""
+    """Raised when Claude is disabled by configuration or has no credentials."""
+
+
+def _configured_key(settings: Settings) -> str | None:
+    value = settings.anthropic_api_key.get_secret_value().strip() if settings.anthropic_api_key else ""
+    return value or None
+
+
+def has_credentials(settings: Settings | None = None) -> bool:
+    """An API key in settings (`.env`), or anything the SDK resolves itself from the process
+    environment: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN, or an `ant auth login` profile named by
+    ANTHROPIC_PROFILE. Checked up front because the SDK only notices missing credentials when a
+    request is made."""
+    settings = settings or get_settings()
+    if _configured_key(settings):
+        return True
+    return any(
+        os.environ.get(name, "").strip() for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE")
+    )
 
 
 @lru_cache
 def get_client() -> anthropic.AsyncAnthropic:
-    # Credentials resolve from the environment (ANTHROPIC_API_KEY, ...). Retries on 429/5xx are
-    # handled by the SDK.
-    return anthropic.AsyncAnthropic(max_retries=3)
+    # The key from settings (services/api/.env) is passed explicitly: values in .env are read by the
+    # settings loader but are not exported to the process environment the SDK reads. Without one,
+    # the SDK resolves credentials itself. It retries 429 / 5xx responses on its own.
+    return anthropic.AsyncAnthropic(api_key=_configured_key(get_settings()), max_retries=3)
 
 
 def require_client(settings: Settings | None = None) -> anthropic.AsyncAnthropic:
     settings = settings or get_settings()
     if not settings.llm_enabled:
         raise LLMUnavailableError("LLM features are disabled (LLM_ENABLED=false)")
+    if not has_credentials(settings):
+        raise LLMUnavailableError("No Anthropic credentials: set ANTHROPIC_API_KEY in services/api/.env")
     return get_client()
 
 

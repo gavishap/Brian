@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Literal
 
@@ -34,9 +35,11 @@ class Settings(BaseSettings):
     supabase_service_role_key: SecretStr | None = None
 
     # --- Claude -----------------------------------------------------------------------------
-    # The Anthropic SDK reads ANTHROPIC_API_KEY itself. With llm_enabled=false (or no key) the
-    # nudge copywriter falls back to templates and chat returns a friendly error.
+    # ANTHROPIC_API_KEY (from .env or the environment). With llm_enabled=false or no credentials,
+    # the nudge copywriter falls back to templates, reflection to a data-only playbook, and the chat
+    # says it is not configured.
     llm_enabled: bool = True
+    anthropic_api_key: SecretStr | None = None
     coach_model: str = "claude-opus-5-5"
     coach_effort: Effort = "medium"
     coach_max_tokens: int = 32000
@@ -87,4 +90,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    # BRIAN_ENV_FILE picks the dotenv file to read ("" reads none: the test suite uses that so a
+    # developer's services/api/.env never leaks into tests).
+    env_file = os.environ.get("BRIAN_ENV_FILE", ".env")
+    return Settings(_env_file=env_file or None)

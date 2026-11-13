@@ -307,6 +307,10 @@ async def stream_chat(user_id: uuid.UUID, request: ChatRequest) -> AsyncIterator
             log.exception("chat request failed (status %s)", exc.status_code)
             yield ChatEventError(message="Something went wrong on our side.", retryable=exc.status_code >= 500)
             return
+        except Exception:
+            log.exception("chat turn failed")
+            yield ChatEventError(message="Something went wrong on our side.", retryable=False)
+            return
         finally:
             await runner.close()
         yield ChatEventDone(message_id=last_reply_id)

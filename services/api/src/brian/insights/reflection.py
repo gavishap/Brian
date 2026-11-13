@@ -10,7 +10,6 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Literal
 
-import anthropic
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -151,8 +150,8 @@ async def run_reflection(session: AsyncSession, profile: Profile, *, now: dateti
             log.warning("reflection returned no playbook (stop_reason=%s)", response.stop_reason)
     except LLMUnavailableError:
         pass
-    except anthropic.AnthropicError as exc:
-        log.warning("reflection failed for %s: %s", profile.id, exc)
+    except Exception as exc:  # fall back to the data-only playbook below
+        log.warning("reflection failed for %s: %r", profile.id, exc)
 
     if playbook is None:
         playbook, model_name = heuristic_playbook(stats), "heuristic"

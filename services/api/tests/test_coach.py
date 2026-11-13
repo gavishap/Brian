@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import anthropic
@@ -112,6 +113,7 @@ def streaming(body: bytes) -> httpx2.Response:
 @pytest.fixture
 def claude(monkeypatch: pytest.MonkeyPatch) -> Iterator[MockClaude]:
     monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     get_settings.cache_clear()
     mock = MockClaude([])
     monkeypatch.setattr(llm, "get_client", mock.client)
@@ -278,3 +280,52 @@ async def test_copywriter_falls_back_to_templates_on_api_errors(claude: MockClau
         "Today's step is still open. Now is a good time.",
         "template",
     )
+
+
+@pytest.fixture
+def no_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE"):
+        monkeypatch.delenv(name, raising=False)
+    get_settings.cache_clear()
+    llm.get_client.cache_clear()
+
+
+async def test_without_credentials_nudges_use_templates_and_chat_says_so(
+    no_credentials: None, client: AsyncClient, user: User
+) -> None:
+    request = CopyRequest(
+        first_name=None,
+        locale="en-US",
+        local_time_label="Friday 18:05",
+        goal_title="Read 20 pages",
+        goal_why=None,
+        goal_category="learning",
+        cadence_label="every day",
+        progress=GoalProgress(0, 0, 0, 1, "today", None, 0),
+        arms={"nudge_type": "micro_step", "tone": "warm", "framing": "gain", "length": "short"},
+    )
+    assert (await generate_copy(request)).source == "template"
+    events = await chat(client, user, {"message": "hi"})
+    assert events[-1] == {
+        "type": "error",
+        "message": "Brian's coach isn't configured on this server yet.",
+        "retryable": False,
+    }
+
+
+def test_api_key_in_dotenv_reaches_the_sdk(
+    no_credentials: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # .env values are read by the settings loader but are not exported to os.environ, where the SDK
+    # would look; the client must get the key explicitly.
+    (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=sk-ant-from-dotenv\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BRIAN_ENV_FILE", ".env")
+    get_settings.cache_clear()
+    llm.get_client.cache_clear()
+    try:
+        assert llm.has_credentials()
+        assert llm.get_client().api_key == "sk-ant-from-dotenv"
+    finally:
+        llm.get_client.cache_clear()

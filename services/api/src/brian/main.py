@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -23,6 +24,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    if not logging.getLogger().handlers:  # e.g. the server process uvicorn's reloader starts
+        configure_logging(get_settings().log_level)
     app = FastAPI(
         title="Brian API",
         version="0.1.0",

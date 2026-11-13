@@ -31,6 +31,7 @@ TEST_URL = ADMIN_URL.rsplit("/", 1)[0] + f"/{DB_NAME}"
 # Settings are read from the environment, so configure it before the app is imported.
 os.environ.update(
     {
+        "BRIAN_ENV_FILE": "",  # ignore any developer services/api/.env
         "ENVIRONMENT": "test",
         "DATABASE_URL": TEST_URL,
         "SUPABASE_JWT_SECRET": JWT_SECRET,
