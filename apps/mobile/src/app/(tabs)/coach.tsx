@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -35,65 +35,76 @@ const STARTERS = [
   'What have you learned about me?',
 ];
 
+let keyCounter = 0;
+function nextKey(prefix: string): string {
+  keyCounter += 1;
+  return `${prefix}-${Date.now()}-${keyCounter}`;
+}
+
+// 'resume' continues the latest conversation (history loaded from the API); 'fresh' starts a new
+// one, optionally about a nudge the person is replying to.
+type Mode = { kind: 'resume' } | { kind: 'fresh'; nudgeId: string | null };
+
 export default function CoachScreen() {
   const { colors } = useTheme();
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ nudgeId?: string; prefill?: string }>();
   const conversations = useConversations();
 
-  const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [mode, setMode] = useState<Mode>({ kind: 'resume' });
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [nudgeId, setNudgeId] = useState<string | null>(null);
+  const [local, setLocal] = useState<UiMessage[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [seenNudgeParam, setSeenNudgeParam] = useState<string | undefined>(undefined);
   const listRef = useRef<FlatList<UiMessage>>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Replying to a nudge starts a fresh conversation about it.
-  useEffect(() => {
-    if (params.nudgeId) {
-      abortRef.current?.abort();
-      setMessages([]);
-      setConversationId(null);
-      setNudgeId(params.nudgeId);
-      setInput(params.prefill ?? '');
-      setHistoryLoaded(true);
-    }
-  }, [params.nudgeId, params.prefill]);
+  // Replying to a nudge (navigated here with ?nudgeId=) starts a fresh conversation about it.
+  // Adjusting state while rendering is React's recommended way to reset on a param change.
+  if (params.nudgeId && params.nudgeId !== seenNudgeParam) {
+    setSeenNudgeParam(params.nudgeId);
+    setMode({ kind: 'fresh', nudgeId: params.nudgeId });
+    setConversationId(null);
+    setLocal([]);
+    setInput(params.prefill ?? '');
+  }
 
-  // Otherwise resume the most recent conversation.
-  useEffect(() => {
-    if (historyLoaded || !conversations.data) return;
-    const latest = conversations.data[0];
-    setHistoryLoaded(true);
-    if (!latest) return;
-    setLoadingHistory(true);
-    fetchConversationMessages(latest.id)
-      .then((rows) => {
-        setConversationId(latest.id);
-        setMessages(rows.map((m) => ({ key: `h-${m.id}`, role: m.role, text: m.text, tools: [] })));
-      })
-      .catch(() => undefined)
-      .finally(() => setLoadingHistory(false));
-  }, [conversations.data, historyLoaded]);
+  const resumeId = mode.kind === 'resume' ? (conversationId ?? conversations.data?.[0]?.id ?? null) : null;
+  const history = useQuery({
+    queryKey: keys.messages(resumeId ?? 'none'),
+    queryFn: () => fetchConversationMessages(resumeId as string),
+    enabled: !!resumeId,
+    // Loaded once per mount (new messages are appended locally); dropped on unmount so the next
+    // visit reloads the full history instead of a stale copy.
+    staleTime: Infinity,
+    gcTime: 0,
+  });
+  const historyMessages: UiMessage[] =
+    mode.kind === 'resume' && history.data
+      ? history.data.map((m) => ({ key: `h-${m.id}`, role: m.role, text: m.text, tools: [] }))
+      : [];
+  const messages = [...historyMessages, ...local];
+  const activeConversationId = conversationId ?? resumeId;
+  const nudgeId = mode.kind === 'fresh' && !conversationId ? mode.nudgeId : null;
+  const loadingHistory = mode.kind === 'resume' && (conversations.isPending || (!!resumeId && history.isPending));
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   function updateAssistant(key: string, update: (message: UiMessage) => UiMessage) {
-    setMessages((current) => current.map((m) => (m.key === key ? update(m) : m)));
+    setLocal((current) => current.map((m) => (m.key === key ? update(m) : m)));
   }
 
   async function send(textOverride?: string) {
     const text = (textOverride ?? input).trim();
     if (!text || streaming) return;
     setInput('');
-    const stamp = Date.now();
-    const assistantKey = `a-${stamp}`;
-    setMessages((current) => [
+    // Nothing to resume: this becomes a new conversation (don't later reload it as history).
+    if (mode.kind === 'resume' && !resumeId) setMode({ kind: 'fresh', nudgeId: null });
+    const assistantKey = nextKey('a');
+    setLocal((current) => [
       ...current,
-      { key: `u-${stamp}`, role: 'user', text, tools: [] },
+      { key: nextKey('u'), role: 'user', text, tools: [] },
       { key: assistantKey, role: 'assistant', text: '', tools: [], pending: true },
     ]);
     setStreaming(true);
@@ -101,7 +112,7 @@ export default function CoachScreen() {
     abortRef.current = controller;
     try {
       for await (const event of streamChat(
-        { message: text, conversation_id: conversationId, nudge_id: conversationId ? null : nudgeId },
+        { message: text, conversation_id: activeConversationId, nudge_id: activeConversationId ? null : nudgeId },
         controller.signal,
       )) {
         switch (event.type) {
@@ -132,7 +143,6 @@ export default function CoachScreen() {
     } finally {
       updateAssistant(assistantKey, (m) => ({ ...m, pending: false }));
       setStreaming(false);
-      setNudgeId(null);
       // Brian's tools may have created goals, logged check-ins or changed settings.
       void queryClient.invalidateQueries({ queryKey: ['goals'] });
       void queryClient.invalidateQueries({ queryKey: keys.me });
@@ -142,9 +152,9 @@ export default function CoachScreen() {
 
   function newChat() {
     abortRef.current?.abort();
-    setMessages([]);
+    setMode({ kind: 'fresh', nudgeId: null });
     setConversationId(null);
-    setNudgeId(null);
+    setLocal([]);
     setInput('');
   }
 

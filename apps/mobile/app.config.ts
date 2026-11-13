@@ -8,6 +8,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Brian',
   slug: 'brian',
   version: '0.1.0',
+  platforms: ['ios', 'android'],
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'brian',

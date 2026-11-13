@@ -8,7 +8,7 @@ import type { GoalCadence, GoalCategory, NudgeIntensity } from '@/api/types';
 import { Button, Card, Chips, ProgressBar, Row, Screen, Stepper, Text, TextField, TimeStepper } from '@/components/ui';
 import { humanize } from '@/lib/format';
 import { deviceTimeZone, registerPushToken } from '@/notifications/register';
-import { spacing } from '@/theme';
+import { spacing, useTheme } from '@/theme';
 
 const CATEGORIES: readonly GoalCategory[] = [
   'fitness',
@@ -34,6 +34,7 @@ type Step = (typeof STEPS)[number];
 
 export default function OnboardingScreen() {
   const queryClient = useQueryClient();
+  const { colors } = useTheme();
   const timezone = deviceTimeZone() ?? 'UTC';
   const [step, setStep] = useState<Step>('about');
   const [name, setName] = useState('');
@@ -108,9 +109,9 @@ export default function OnboardingScreen() {
 
         {step === 'about' && (
           <View style={styles.section}>
-            <Text variant="title">Hi, I'm Brian.</Text>
+            <Text variant="title">Hi, I’m Brian.</Text>
             <Text muted>
-              I help you make steady progress on long-term goals. I'll check in at good moments, learn what kind of
+              I help you make steady progress on long-term goals. I’ll check in at good moments, learn what kind of
               nudges actually help you, and adjust over time.
             </Text>
             <TextField
@@ -180,7 +181,7 @@ export default function OnboardingScreen() {
         {step === 'nudges' && (
           <View style={styles.section}>
             <Text variant="title">How should I nudge you?</Text>
-            <Text muted>I'll learn the best times and tone from how you respond. Set the limits here.</Text>
+            <Text muted>I’ll learn the best times and tone from how you respond. Set the limits here.</Text>
             <Text variant="label">Intensity</Text>
             <Chips
               options={INTENSITIES}
@@ -213,23 +214,23 @@ export default function OnboardingScreen() {
           <View style={styles.section}>
             <Text variant="title">Let me reach you</Text>
             <Text muted>
-              Nudges arrive as notifications. You can answer right from them: tap Done when you've done it, Later if
-              now is a bad time, or reply to tell me how it's going. Every response helps me pick better moments.
+              Nudges arrive as notifications. You can answer right from them: tap Done when you’ve done it, Later if
+              now is a bad time, or reply to tell me how it’s going. Every response helps me pick better moments.
             </Text>
             {notificationStatus === 'registered' ? (
               <Text variant="label">Notifications are on. ✅</Text>
             ) : notificationStatus === 'denied' ? (
               <Text muted>Notifications are off. You can turn them on later in Settings.</Text>
             ) : notificationStatus === 'unsupported' ? (
-              <Text muted>This device can't receive push notifications (simulator). Continue on a real phone.</Text>
+              <Text muted>This device can’t receive push notifications (simulator). Continue on a real phone.</Text>
             ) : notificationStatus === 'misconfigured' ? (
-              <Text muted>Push isn't configured in this build (missing EAS project id).</Text>
+              <Text muted>Push isn’t configured in this build (missing EAS project id).</Text>
             ) : notificationStatus === 'error' ? (
-              <Text muted>Couldn't turn on notifications right now. You can retry from Settings.</Text>
+              <Text muted>Couldn’t turn on notifications right now. You can retry from Settings.</Text>
             ) : (
               <Button title="Turn on notifications" onPress={enableNotifications} loading={busy} />
             )}
-            {error ? <Text color="#DC2626">{error}</Text> : null}
+            {error ? <Text color={colors.danger}>{error}</Text> : null}
             <Row style={styles.nav}>
               <Button title="Back" variant="ghost" onPress={back} />
               <Button

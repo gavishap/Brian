@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import { AndroidImportance } from 'expo-notifications';
 import { Platform } from 'react-native';
 
 /** Android channel the API sends nudges on (`channelId: "nudges"`). */
@@ -48,7 +49,7 @@ async function doConfigure(): Promise<void> {
     await Notifications.setNotificationChannelAsync(NUDGE_CHANNEL_ID, {
       name: 'Nudges',
       description: 'Check-ins and reminders from Brian about your goals',
-      importance: Notifications.AndroidImportance.HIGH,
+      importance: AndroidImportance.HIGH,
       vibrationPattern: [0, 180, 120, 180],
       lightColor: '#4F46E5',
     });
